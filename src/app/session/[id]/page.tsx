@@ -255,19 +255,7 @@ export default function SessionPage({ params }: { params: { id: string } }) {
         </div>
 
         <div className="flex-1 flex flex-col md:flex-row h-full overflow-hidden p-4 gap-4 bg-[#0a0f18]">
-          {/* LEFT: Partner's panel */}
-          <div className="flex-1 flex flex-col min-w-0 space-y-4">
-            <ProfileCard
-              username={myRole === 'A' ? session?.userB?.leetcodeId : session?.userA?.leetcodeId}
-              realName={myRole === 'A' ? session?.userB?.name : session?.userA?.name}
-              isSpeaking={isPeerSpeaking}
-            />
-            <div className="flex-1 min-h-0">
-              <CodeEditor value={peerCode} readOnly onCopy={handleCopyCode} />
-            </div>
-          </div>
-
-          {/* RIGHT: My panel */}
+          {/* LEFT: MY panel — comes first */}
           <div className="flex-1 flex flex-col min-w-0 space-y-4">
             <ProfileCard
               username={user?.leetcodeId}
@@ -276,6 +264,18 @@ export default function SessionPage({ params }: { params: { id: string } }) {
             />
             <div className="flex-1 min-h-0">
               <CodeEditor value={myCode} onChange={handleCodeChange} />
+            </div>
+          </div>
+
+          {/* RIGHT: Partner's panel — comes second */}
+          <div className="flex-1 flex flex-col min-w-0 space-y-4">
+            <ProfileCard
+              username={myRole === 'A' ? session?.userB?.leetcodeId : session?.userA?.leetcodeId}
+              realName={myRole === 'A' ? session?.userB?.name : session?.userA?.name}
+              isSpeaking={isPeerSpeaking}
+            />
+            <div className="flex-1 min-h-0">
+              <CodeEditor value={peerCode} readOnly onCopy={handleCopyCode} />
             </div>
           </div>
         </div>

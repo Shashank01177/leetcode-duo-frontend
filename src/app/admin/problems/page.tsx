@@ -21,6 +21,8 @@ export default function ProblemsAdmin() {
   const [formData, setFormData] = useState({ ...EMPTY_FORM });
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [lcSlug, setLcSlug] = useState('');
+  const [lcImporting, setLcImporting] = useState(false);
 
   const fetchProblems = async () => {
     try {
@@ -42,6 +44,80 @@ export default function ProblemsAdmin() {
     } finally {
       setLoading(false);
       setTimeout(() => setMessage(''), 3000);
+    }
+  };
+
+  // Import a problem from LeetCode by slug (e.g. "two-sum")
+  const handleLeetCodeImport = async () => {
+    if (!lcSlug.trim()) return;
+    setLcImporting(true);
+    setMessage('');
+    try {
+      const slug = lcSlug.trim().toLowerCase().replace(/\s+/g, '-');
+      // Fetch from LeetCode GraphQL via our backend proxy or directly
+      const query = {
+        query: `query getQuestion($titleSlug: String!) {
+          question(titleSlug: $titleSlug) {
+            title
+            difficulty
+            content
+            exampleTestcases
+            topicTags { name }
+            hints
+          }
+        }`,
+        variables: { titleSlug: slug }
+      };
+      const resp = await fetch('https://leetcode.com/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Referer': 'https://leetcode.com' },
+        body: JSON.stringify(query),
+      });
+      const data = await resp.json();
+      const q = data?.data?.question;
+      if (!q) throw new Error('Problem not found on LeetCode');
+
+      // Strip HTML from content
+      const stripHtml = (html: string) => html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').trim();
+
+      // Map topic tags to our data structures
+      const tagMap: Record<string, string> = {
+        'Array': 'Arrays & Strings', 'String': 'Arrays & Strings',
+        'Linked List': 'Linked Lists', 'Stack': 'Stacks & Queues',
+        'Queue': 'Stacks & Queues', 'Tree': 'Trees & Graphs',
+        'Graph': 'Trees & Graphs', 'Dynamic Programming': 'Dynamic Programming',
+        'Hash Table': 'Hashing', 'Sorting': 'Sorting & Searching',
+        'Binary Search': 'Sorting & Searching', 'Two Pointers': 'Two Pointers / Sliding Window',
+        'Sliding Window': 'Two Pointers / Sliding Window', 'Backtracking': 'Backtracking',
+        'Heap (Priority Queue)': 'Heap / Priority Queue',
+      };
+      const matchedTag = q.topicTags?.find((t: any) => tagMap[t.name]);
+      const dataStructure = matchedTag ? tagMap[matchedTag.name] : 'Arrays & Strings';
+
+      // Parse examples from exampleTestcases
+      const rawExamples = (q.exampleTestcases || '').split('\n').filter(Boolean);
+      const examples = rawExamples.length >= 2
+        ? [{ input: rawExamples[0], output: rawExamples[1], explanation: '' }]
+        : [{ input: 'See LeetCode', output: 'See LeetCode', explanation: '' }];
+
+      const payload = {
+        title: q.title,
+        difficulty: q.difficulty,
+        description: stripHtml(q.content || '').substring(0, 2000),
+        examples,
+        constraints: q.hints?.length ? q.hints.map(stripHtml) : ['See LeetCode for constraints'],
+        dataStructure,
+      };
+
+      await api.post('/admin/problems', payload);
+      await fetchProblems();
+      setMessage(`✅ "${q.title}" imported from LeetCode!`);
+      setLcSlug('');
+    } catch (e: any) {
+      setMessage('❌ Import failed: ' + (e.message || 'Check the problem slug'));
+    } finally {
+      setLcImporting(false);
+      setTimeout(() => setMessage(''), 5000);
     }
   };
 
@@ -105,6 +181,33 @@ export default function ProblemsAdmin() {
           >
             {loading ? 'Working...' : 'Seed 10 Sample Problems'}
           </button>
+        </div>
+
+        {/* LeetCode Import */}
+        <div className="bg-card border border-yellow-500/30 rounded-lg p-5 mb-6">
+          <h2 className="text-lg font-bold text-yellow-400 mb-1 flex items-center gap-2">
+            <span>🟡</span> Import from LeetCode
+          </h2>
+          <p className="text-slate-400 text-sm mb-3">
+            Enter a LeetCode problem slug (from the URL) to import it directly. Example: <code className="text-yellow-300">two-sum</code>, <code className="text-yellow-300">longest-substring-without-repeating-characters</code>
+          </p>
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={lcSlug}
+              onChange={e => setLcSlug(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleLeetCodeImport()}
+              placeholder="e.g. two-sum or valid-parentheses"
+              className="flex-1 bg-background border border-border rounded p-2 text-white text-sm focus:outline-none focus:border-yellow-400"
+            />
+            <button
+              onClick={handleLeetCodeImport}
+              disabled={lcImporting || !lcSlug.trim()}
+              className="px-5 py-2 bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-black font-bold rounded text-sm"
+            >
+              {lcImporting ? 'Importing...' : 'Import'}
+            </button>
+          </div>
         </div>
 
         {message && (

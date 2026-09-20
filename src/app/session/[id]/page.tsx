@@ -427,9 +427,6 @@ export default function SessionPage({ params }: { params: { id: string } }) {
               {submitResult.error && !submitResult.accepted && (
                 <span className="text-red-300 text-xs">{submitResult.error?.substring(0, 150)}</span>
               )}
-              {submitResult.url && (
-                <a href={submitResult.url} target="_blank" className="text-yellow-400 underline text-xs">View on LeetCode →</a>
-              )}
             </div>
           )}
         </div>

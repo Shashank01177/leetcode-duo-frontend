@@ -13,7 +13,7 @@ interface Props {
 export function CodeEditor({ value, onChange, readOnly, language = 'javascript', onCopy }: Props) {
   return (
     <div className="flex flex-col h-full bg-[#1e1e1e] border border-border rounded-lg overflow-hidden">
-      <div className="flex justify-between items-center px-4 py-2 bg-card border-b border-border">
+      <div className="flex justify-between items-center px-4 py-2 bg-card border-b border-border shrink-0">
         <div className="flex items-center space-x-2">
           <span className="text-xs font-semibold text-slate-300 uppercase">{language}</span>
           {readOnly && <span className="text-[10px] bg-red-500/20 text-red-500 px-2 py-0.5 rounded">Read Only</span>}
@@ -24,7 +24,7 @@ export function CodeEditor({ value, onChange, readOnly, language = 'javascript',
           </button>
         )}
       </div>
-      <div className="flex-1 min-h-[400px]">
+      <div className="flex-1 overflow-hidden" style={{ minHeight: '300px' }}>
         <MonacoEditor
           height="100%"
           language={language}
@@ -38,6 +38,7 @@ export function CodeEditor({ value, onChange, readOnly, language = 'javascript',
             wordWrap: 'on',
             scrollBeyondLastLine: false,
             padding: { top: 16 },
+            automaticLayout: true,
           }}
         />
       </div>

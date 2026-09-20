@@ -34,6 +34,11 @@ export default function SessionPage({ params }: { params: { id: string } }) {
   const [isRunning, setIsRunning] = useState(false);
   const [showResults, setShowResults] = useState(false);
 
+  // Submit to LeetCode states
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitResult, setSubmitResult] = useState<any>(null);
+  const [showVerdict, setShowVerdict] = useState(false);
+
   const peerRef = useRef<any>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -243,6 +248,26 @@ export default function SessionPage({ params }: { params: { id: string } }) {
     }
   };
 
+  const handleSubmitToLeetCode = async () => {
+    if (!problem?._id || !myCode.trim()) return;
+    setIsSubmitting(true);
+    setShowVerdict(true);
+    setSubmitResult(null);
+    try {
+      const res = await api.post('/submit', {
+        code: myCode,
+        language,
+        problemId: problem._id,
+        sessionId: params.id,
+      });
+      setSubmitResult(res.data.data);
+    } catch (e: any) {
+      setSubmitResult({ error: e.response?.data?.message || 'Submission failed' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const toggleMute = () => {
     if (localStreamRef.current) {
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
@@ -307,8 +332,8 @@ export default function SessionPage({ params }: { params: { id: string } }) {
 
       </div>
 
-      {/* Run Code Toolbar */}
-      <div className="shrink-0 bg-card border-t border-border px-4 py-2 flex items-center gap-3">
+      {/* Run Code + Submit Toolbar */}
+      <div className="shrink-0 bg-card border-t border-border px-4 py-2 flex items-center gap-3 flex-wrap">
         <select
           value={language}
           onChange={e => setLanguage(e.target.value)}
@@ -328,42 +353,43 @@ export default function SessionPage({ params }: { params: { id: string } }) {
           disabled={isRunning || !problem?._id}
           className="flex items-center gap-2 px-4 py-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-semibold rounded"
         >
-          {isRunning ? (
-            <><span className="animate-spin">⟳</span> Running...</>
-          ) : (
-            <>▶ Run Code</>
-          )}
+          {isRunning ? <><span className="animate-spin inline-block">⟳</span> Running...</> : <>▶ Run Code</>}
         </button>
 
-        {runResults && (
-          <button
-            onClick={() => setShowResults(!showResults)}
-            className="text-sm text-slate-400 hover:text-white underline"
-          >
-            {showResults ? 'Hide Results' : 'Show Results'}
-          </button>
-        )}
+        <button
+          onClick={handleSubmitToLeetCode}
+          disabled={isSubmitting || !problem?._id}
+          className="flex items-center gap-2 px-4 py-1.5 bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-black text-sm font-bold rounded"
+        >
+          {isSubmitting ? <><span className="animate-spin inline-block">⟳</span> Submitting...</> : <>🚀 Submit to LeetCode</>}
+        </button>
 
         {runResults?.summary && (
-          <span className={`text-sm font-bold ml-2 ${runResults.summary.allPassed ? 'text-green-400' : 'text-red-400'}`}>
+          <span className={`text-sm font-bold ${runResults.summary.allPassed ? 'text-green-400' : 'text-red-400'}`}>
             {runResults.summary.allPassed ? '✅' : '❌'} {runResults.summary.passed}/{runResults.summary.total} Passed
+          </span>
+        )}
+
+        {submitResult?.status && (
+          <span className={`text-sm font-bold ${submitResult.accepted ? 'text-green-400' : 'text-red-400'}`}>
+            {submitResult.accepted ? '✅' : '❌'} {submitResult.status}
+            {submitResult.runtimeDisplay && <span className="text-slate-300 font-normal ml-2">· {submitResult.runtimeDisplay}</span>}
+            {submitResult.runtimePercentile && <span className="text-blue-400 font-normal ml-1">(beats {submitResult.runtimePercentile}%)</span>}
           </span>
         )}
       </div>
 
       {/* Test Results Panel */}
       {showResults && runResults && (
-        <div className="shrink-0 max-h-52 overflow-y-auto bg-[#0d1117] border-t border-border px-4 py-3">
+        <div className="shrink-0 max-h-48 overflow-y-auto bg-[#0d1117] border-t border-border px-4 py-3">
           {runResults.error ? (
             <p className="text-red-400 text-sm font-mono">{runResults.error}</p>
           ) : (
             <div className="space-y-2">
               {runResults.results?.map((r: any) => (
                 <div key={r.testCase} className={`rounded p-2 text-xs font-mono border ${r.passed ? 'border-green-500/30 bg-green-500/5' : 'border-red-500/30 bg-red-500/5'}`}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={r.passed ? 'text-green-400' : 'text-red-400'}>
-                      {r.passed ? '✅ PASS' : '❌ FAIL'} — Test Case {r.testCase}
-                    </span>
+                  <div className={`font-bold mb-1 ${r.passed ? 'text-green-400' : 'text-red-400'}`}>
+                    {r.passed ? '✅ PASS' : '❌ FAIL'} — Test Case {r.testCase}
                   </div>
                   <div className="text-slate-400">Input: <span className="text-slate-200">{r.input}</span></div>
                   <div className="text-slate-400">Expected: <span className="text-green-300">{r.expected}</span></div>
@@ -371,6 +397,39 @@ export default function SessionPage({ params }: { params: { id: string } }) {
                   {r.stderr && <div className="text-red-400 mt-1">Error: {r.stderr.substring(0, 200)}</div>}
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* LeetCode Verdict Panel */}
+      {showVerdict && submitResult && (
+        <div className={`shrink-0 px-4 py-3 border-t text-sm font-mono ${submitResult.accepted ? 'bg-green-500/10 border-green-500/30' : submitResult.error ? 'bg-red-500/10 border-red-500/30' : 'bg-orange-500/10 border-orange-500/30'}`}>
+          {isSubmitting && <p className="text-yellow-400">⏳ Submitting to LeetCode... (may take 5-15 seconds)</p>}
+          {!isSubmitting && submitResult.error && <p className="text-red-400">❌ {submitResult.error}</p>}
+          {!isSubmitting && submitResult.status && (
+            <div className="flex flex-wrap gap-4 items-center">
+              <span className={`text-lg font-bold ${submitResult.accepted ? 'text-green-400' : 'text-red-400'}`}>
+                {submitResult.accepted ? '✅ Accepted' : `❌ ${submitResult.status}`}
+              </span>
+              {submitResult.totalCorrect != null && (
+                <span className="text-slate-300">{submitResult.totalCorrect}/{submitResult.totalTestcases} test cases</span>
+              )}
+              {submitResult.runtimeDisplay && (
+                <span className="text-blue-300">⚡ {submitResult.runtimeDisplay} {submitResult.runtimePercentile && `· beats ${submitResult.runtimePercentile}%`}</span>
+              )}
+              {submitResult.memoryDisplay && (
+                <span className="text-purple-300">🗃️ {submitResult.memoryDisplay} {submitResult.memoryPercentile && `· beats ${submitResult.memoryPercentile}%`}</span>
+              )}
+              {submitResult.lastTestcase && !submitResult.accepted && (
+                <span className="text-orange-300 text-xs">Failed on: {submitResult.lastTestcase}</span>
+              )}
+              {submitResult.error && !submitResult.accepted && (
+                <span className="text-red-300 text-xs">{submitResult.error?.substring(0, 150)}</span>
+              )}
+              {submitResult.url && (
+                <a href={submitResult.url} target="_blank" className="text-yellow-400 underline text-xs">View on LeetCode →</a>
+              )}
             </div>
           )}
         </div>

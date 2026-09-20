@@ -57,6 +57,7 @@ export default function ProblemsAdmin() {
       const query = {
         query: `query getQuestion($titleSlug: String!) {
           question(titleSlug: $titleSlug) {
+            questionId
             title
             difficulty
             content
@@ -136,6 +137,8 @@ export default function ProblemsAdmin() {
         testCases,
         constraints: q.hints?.length ? q.hints.map(stripHtml) : ['See LeetCode for constraints'],
         dataStructure,
+        titleSlug: slug,
+        leetcodeQuestionId: q.questionId || '',
         starterCode: {
           python: getSnippet('python3') || getSnippet('python'),
           javascript: getSnippet('javascript'),

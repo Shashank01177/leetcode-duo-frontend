@@ -1,10 +1,10 @@
 'use client';
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import api from '@/lib/api';
 import { getSocket } from '@/lib/socket';
-import { AuthContext } from '@/contexts/AuthContext';
+import Link from 'next/link';
 import { LeetCodeProfile } from '@/lib/types';
 
 export default function Dashboard() {
@@ -12,6 +12,7 @@ export default function Dashboard() {
   const [profile, setProfile] = useState<LeetCodeProfile | null>(null);
   const [inQueue, setInQueue] = useState(false);
   const router = useRouter();
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (user?.leetcodeId) {
@@ -21,15 +22,31 @@ export default function Dashboard() {
     }
   }, [user]);
 
+  // Navigate to active session if one exists
+  const checkActiveSession = async () => {
+    try {
+      const me = await api.get('/auth/me');
+      const sessionId = me.data.data?.currentSessionId ?? me.data.currentSessionId;
+      if (sessionId) {
+        router.push(`/session/${sessionId}`);
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  };
+
   useEffect(() => {
     if (!user) return;
+
+    // Check immediately if user already has a session
+    checkActiveSession();
+
+    // Socket: real-time match notification
     const socket = getSocket();
     socket.connect();
-    
     socket.emit('authenticate', { token: localStorage.getItem('token') });
-    
+
     socket.on('match-found', ({ session }) => {
-      // backend sends the session object; extract its _id
       const id = session?._id ?? session?.id ?? session;
       router.push(`/session/${id}`);
     });
@@ -39,14 +56,31 @@ export default function Dashboard() {
     };
   }, [user, router]);
 
+  // Polling fallback: check every 3s when in queue (in case socket misses event)
+  useEffect(() => {
+    if (inQueue) {
+      pollRef.current = setInterval(async () => {
+        const redirected = await checkActiveSession();
+        if (redirected && pollRef.current) clearInterval(pollRef.current);
+      }, 3000);
+    } else {
+      if (pollRef.current) clearInterval(pollRef.current);
+    }
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [inQueue]);
+
   const toggleQueue = async () => {
     try {
       if (inQueue) {
         await api.delete('/session/queue/leave');
+        setInQueue(false);
       } else {
-        await api.post('/session/queue/join');
+        const res = await api.post('/session/queue/join');
+        setInQueue(true);
+        // Auto-match may have fired immediately
+        const sessionId = res.data.data?._id;
+        if (sessionId) router.push(`/session/${sessionId}`);
       }
-      setInQueue(!inQueue);
     } catch (err) {
       console.error(err);
     }
@@ -58,7 +92,13 @@ export default function Dashboard() {
     <div className="min-h-screen p-8 max-w-4xl mx-auto">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-white">Lobby</h1>
-        <button onClick={logout} className="text-sm text-slate-400 hover:text-white">Logout</button>
+        <div className="flex items-center gap-4">
+          <Link href="/profile" className="text-sm text-slate-400 hover:text-white">⚙️ Profile</Link>
+          {user.role === 'admin' && (
+            <Link href="/admin" className="text-sm text-accent hover:text-green-400">Admin Panel</Link>
+          )}
+          <button onClick={logout} className="text-sm text-slate-400 hover:text-white">Logout</button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -103,15 +143,20 @@ export default function Dashboard() {
           {inQueue ? (
             <div className="text-center space-y-6">
               <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-accent mx-auto"></div>
-              <div className="text-lg text-white">Waiting for match...</div>
+              <div className="text-lg text-white font-semibold">Finding your partner...</div>
+              <div className="text-sm text-slate-400">You'll be matched automatically</div>
               <button onClick={toggleQueue} className="px-6 py-2 bg-red-500/20 text-red-500 border border-red-500/50 rounded hover:bg-red-500/30 transition">
                 Leave Queue
               </button>
             </div>
           ) : (
-            <div className="text-center space-y-6">
-              <div className="text-lg text-slate-300">Ready to code with a partner?</div>
-              <button onClick={toggleQueue} className="px-8 py-3 bg-accent hover:bg-green-600 text-white font-bold rounded-lg shadow-lg shadow-accent/20 transition transform hover:scale-105">
+            <div className="text-center space-y-4">
+              <div className="text-4xl mb-2">🧑‍💻</div>
+              <div className="text-xl font-bold text-white">Start a Duo Session</div>
+              <div className="text-sm text-slate-400 max-w-xs">
+                Join the queue and get instantly matched with another coder. Solve problems together with live voice!
+              </div>
+              <button onClick={toggleQueue} className="px-8 py-3 bg-accent hover:bg-green-600 text-white font-bold rounded-lg shadow-lg shadow-accent/20 transition transform hover:scale-105 mt-2">
                 Join Queue
               </button>
             </div>

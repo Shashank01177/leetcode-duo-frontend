@@ -54,7 +54,6 @@ export default function ProblemsAdmin() {
     setMessage('');
     try {
       const slug = lcSlug.trim().toLowerCase().replace(/\s+/g, '-');
-      // Fetch from LeetCode GraphQL via our backend proxy or directly
       const query = {
         query: `query getQuestion($titleSlug: String!) {
           question(titleSlug: $titleSlug) {
@@ -62,8 +61,10 @@ export default function ProblemsAdmin() {
             difficulty
             content
             exampleTestcases
+            jsonExampleTestcases
             topicTags { name }
             hints
+            codeSnippets { lang langSlug code }
           }
         }`,
         variables: { titleSlug: slug }
@@ -80,6 +81,24 @@ export default function ProblemsAdmin() {
       // Strip HTML from content
       const stripHtml = (html: string) => html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').trim();
 
+      // Parse test cases from HTML <pre> blocks
+      const parseTestCasesFromHtml = (html: string): { input: string; expected: string }[] => {
+        const cases: { input: string; expected: string }[] = [];
+        const preMatches = html.match(/<pre>([\s\S]*?)<\/pre>/gi) || [];
+        for (const pre of preMatches) {
+          const text = stripHtml(pre);
+          const inputMatch = text.match(/Input:\s*(.+?)(?=Output:|$)/s);
+          const outputMatch = text.match(/Output:\s*(.+?)(?=Explanation:|Constraints:|$)/s);
+          if (inputMatch && outputMatch) {
+            cases.push({
+              input: inputMatch[1].trim(),
+              expected: outputMatch[1].trim(),
+            });
+          }
+        }
+        return cases;
+      };
+
       // Map topic tags to our data structures
       const tagMap: Record<string, string> = {
         'Array': 'Arrays & Strings', 'String': 'Arrays & Strings',
@@ -94,24 +113,40 @@ export default function ProblemsAdmin() {
       const matchedTag = q.topicTags?.find((t: any) => tagMap[t.name]);
       const dataStructure = matchedTag ? tagMap[matchedTag.name] : 'Arrays & Strings';
 
-      // Parse examples from exampleTestcases
-      const rawExamples = (q.exampleTestcases || '').split('\n').filter(Boolean);
-      const examples = rawExamples.length >= 2
-        ? [{ input: rawExamples[0], output: rawExamples[1], explanation: '' }]
-        : [{ input: 'See LeetCode', output: 'See LeetCode', explanation: '' }];
+      // Parse examples from HTML
+      const testCases = parseTestCasesFromHtml(q.content || '');
+
+      // Also build display examples
+      const rawInputs = (q.exampleTestcases || '').split('\n').filter(Boolean);
+      const examples = testCases.length > 0
+        ? testCases.map(tc => ({ input: tc.input, output: tc.expected, explanation: '' }))
+        : rawInputs.length >= 2
+          ? [{ input: rawInputs[0], output: rawInputs[1], explanation: '' }]
+          : [{ input: 'See LeetCode', output: 'See LeetCode', explanation: '' }];
+
+      // Get starter code snippets
+      const snippets = q.codeSnippets || [];
+      const getSnippet = (lang: string) => snippets.find((s: any) => s.langSlug === lang)?.code || '';
 
       const payload = {
         title: q.title,
         difficulty: q.difficulty,
-        description: stripHtml(q.content || '').substring(0, 2000),
+        description: stripHtml(q.content || '').substring(0, 3000),
         examples,
+        testCases,
         constraints: q.hints?.length ? q.hints.map(stripHtml) : ['See LeetCode for constraints'],
         dataStructure,
+        starterCode: {
+          python: getSnippet('python3') || getSnippet('python'),
+          javascript: getSnippet('javascript'),
+          java: getSnippet('java'),
+          cpp: getSnippet('cpp'),
+        },
       };
 
       await api.post('/admin/problems', payload);
       await fetchProblems();
-      setMessage(`✅ "${q.title}" imported from LeetCode!`);
+      setMessage(`✅ "${q.title}" imported with ${testCases.length} test case(s)!`);
       setLcSlug('');
     } catch (e: any) {
       setMessage('❌ Import failed: ' + (e.message || 'Check the problem slug'));

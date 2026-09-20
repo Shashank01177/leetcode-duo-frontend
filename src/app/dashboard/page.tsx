@@ -22,14 +22,19 @@ export default function Dashboard() {
     }
   }, [user]);
 
-  // Navigate to active session if one exists
+  // Only redirect to session when actively matched (socket or poll)
   const checkActiveSession = async () => {
     try {
       const me = await api.get('/auth/me');
       const sessionId = me.data.data?.currentSessionId ?? me.data.currentSessionId;
       if (sessionId) {
-        router.push(`/session/${sessionId}`);
-        return true;
+        // Verify session is actually active before redirecting
+        const sRes = await api.get(`/session/${sessionId}`);
+        const session = sRes.data.data ?? sRes.data;
+        if (session?.status === 'active') {
+          router.push(`/session/${sessionId}`);
+          return true;
+        }
       }
     } catch (_) {}
     return false;
@@ -37,10 +42,6 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!user) return;
-
-    // Check immediately if user already has a session
-    checkActiveSession();
-
     // Socket: real-time match notification
     const socket = getSocket();
     socket.connect();
@@ -56,7 +57,7 @@ export default function Dashboard() {
     };
   }, [user, router]);
 
-  // Polling fallback: check every 3s when in queue (in case socket misses event)
+  // Polling fallback — ONLY runs when user is in queue
   useEffect(() => {
     if (inQueue) {
       pollRef.current = setInterval(async () => {

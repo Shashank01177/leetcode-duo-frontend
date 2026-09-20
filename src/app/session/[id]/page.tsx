@@ -16,8 +16,8 @@ export default function SessionPage({ params }: { params: { id: string } }) {
   const [session, setSession] = useState<any>(null);
   const [problem, setProblem] = useState<any>(null);
   const [myRole, setMyRole] = useState<'A' | 'B'>('A');
-  const [myCode, setMyCode] = useState('// Write your code here\\n');
-  const [peerCode, setPeerCode] = useState('// Peer is typing...\\n');
+  const [myCode, setMyCode] = useState('// Write your code here\n');
+  const [peerCode, setPeerCode] = useState('// Peer is typing...\n');
   
   const [myProfile, setMyProfile] = useState<any>(null);
   const [peerProfile, setPeerProfile] = useState<any>(null);
@@ -27,7 +27,13 @@ export default function SessionPage({ params }: { params: { id: string } }) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isPeerSpeaking, setIsPeerSpeaking] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
-  
+
+  // Run Code States
+  const [language, setLanguage] = useState('python');
+  const [runResults, setRunResults] = useState<any>(null);
+  const [isRunning, setIsRunning] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+
   const peerRef = useRef<any>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -218,6 +224,25 @@ export default function SessionPage({ params }: { params: { id: string } }) {
     handleCodeChange(peerCode);
   };
 
+  const handleRunCode = async () => {
+    if (!problem?._id || !myCode.trim()) return;
+    setIsRunning(true);
+    setShowResults(true);
+    setRunResults(null);
+    try {
+      const res = await api.post(`/session/${params.id}/run-code`, {
+        code: myCode,
+        language,
+        problemId: problem._id,
+      });
+      setRunResults(res.data.data);
+    } catch (e: any) {
+      setRunResults({ error: e.response?.data?.message || 'Execution failed' });
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
   const toggleMute = () => {
     if (localStreamRef.current) {
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
@@ -281,6 +306,75 @@ export default function SessionPage({ params }: { params: { id: string } }) {
         </div>
 
       </div>
+
+      {/* Run Code Toolbar */}
+      <div className="shrink-0 bg-card border-t border-border px-4 py-2 flex items-center gap-3">
+        <select
+          value={language}
+          onChange={e => setLanguage(e.target.value)}
+          className="bg-background border border-border text-white text-sm rounded px-2 py-1 focus:outline-none focus:border-accent"
+        >
+          <option value="python">Python</option>
+          <option value="javascript">JavaScript</option>
+          <option value="java">Java</option>
+          <option value="cpp">C++</option>
+          <option value="c">C</option>
+          <option value="go">Go</option>
+          <option value="rust">Rust</option>
+        </select>
+
+        <button
+          onClick={handleRunCode}
+          disabled={isRunning || !problem?._id}
+          className="flex items-center gap-2 px-4 py-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-semibold rounded"
+        >
+          {isRunning ? (
+            <><span className="animate-spin">⟳</span> Running...</>
+          ) : (
+            <>▶ Run Code</>
+          )}
+        </button>
+
+        {runResults && (
+          <button
+            onClick={() => setShowResults(!showResults)}
+            className="text-sm text-slate-400 hover:text-white underline"
+          >
+            {showResults ? 'Hide Results' : 'Show Results'}
+          </button>
+        )}
+
+        {runResults?.summary && (
+          <span className={`text-sm font-bold ml-2 ${runResults.summary.allPassed ? 'text-green-400' : 'text-red-400'}`}>
+            {runResults.summary.allPassed ? '✅' : '❌'} {runResults.summary.passed}/{runResults.summary.total} Passed
+          </span>
+        )}
+      </div>
+
+      {/* Test Results Panel */}
+      {showResults && runResults && (
+        <div className="shrink-0 max-h-52 overflow-y-auto bg-[#0d1117] border-t border-border px-4 py-3">
+          {runResults.error ? (
+            <p className="text-red-400 text-sm font-mono">{runResults.error}</p>
+          ) : (
+            <div className="space-y-2">
+              {runResults.results?.map((r: any) => (
+                <div key={r.testCase} className={`rounded p-2 text-xs font-mono border ${r.passed ? 'border-green-500/30 bg-green-500/5' : 'border-red-500/30 bg-red-500/5'}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={r.passed ? 'text-green-400' : 'text-red-400'}>
+                      {r.passed ? '✅ PASS' : '❌ FAIL'} — Test Case {r.testCase}
+                    </span>
+                  </div>
+                  <div className="text-slate-400">Input: <span className="text-slate-200">{r.input}</span></div>
+                  <div className="text-slate-400">Expected: <span className="text-green-300">{r.expected}</span></div>
+                  {!r.passed && <div className="text-slate-400">Got: <span className="text-red-300">{r.actual || '(no output)'}</span></div>}
+                  {r.stderr && <div className="text-red-400 mt-1">Error: {r.stderr.substring(0, 200)}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="shrink-0">
         <VoiceCallBar 

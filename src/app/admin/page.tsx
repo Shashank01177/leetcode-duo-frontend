@@ -11,6 +11,7 @@ export default function AdminDashboard() {
   const [autoMatch, setAutoMatch] = useState(false);
   const [queue, setQueue] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
@@ -29,6 +30,7 @@ export default function AdminDashboard() {
       setStats({ users: users.length, sessions: sessionsData.filter((s: any) => s.status === 'active').length, queue: queueData.length });
       setQueue(queueData);
       setSessions(sessionsData);
+      setUsers(users);
       setAutoMatch(autoMatchData.enabled ?? false);
     } catch (e) {
       console.error(e);
@@ -126,7 +128,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Active Sessions */}
-        <div>
+        <div className="mb-10">
           <h2 className="text-xl font-bold text-white mb-4">Sessions</h2>
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <table className="w-full text-left text-sm">
@@ -165,6 +167,56 @@ export default function AdminDashboard() {
             </table>
           </div>
         </div>
+
+        {/* Registered Users */}
+        <div className="mb-10">
+          <h2 className="text-xl font-bold text-white mb-4">
+            Registered Users <span className="text-slate-500 font-normal text-base">({users.length})</span>
+          </h2>
+          <div className="bg-card rounded-xl border border-border overflow-hidden">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-border text-slate-400">
+                  <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3">LeetCode ID</th>
+                  <th className="px-4 py-3">Phone</th>
+                  <th className="px-4 py-3">Role</th>
+                  <th className="px-4 py-3">Queue</th>
+                  <th className="px-4 py-3">LC Session</th>
+                  <th className="px-4 py-3">Joined</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {users.length === 0 ? (
+                  <tr><td colSpan={7} className="px-4 py-6 text-center text-slate-500">No users registered yet.</td></tr>
+                ) : users.map((u: any) => (
+                  <tr key={u._id} className="hover:bg-slate-800/40">
+                    <td className="px-4 py-3 text-white font-medium">{u.name}</td>
+                    <td className="px-4 py-3 text-accent">{u.leetcodeId}</td>
+                    <td className="px-4 py-3 text-slate-300">{u.phone}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${u.role === 'admin' ? 'bg-purple-500/20 text-purple-400' : 'bg-slate-700 text-slate-300'}`}>
+                        {u.role}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {u.isInQueue
+                        ? <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full">In Queue</span>
+                        : <span className="text-xs text-slate-500">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {u.leetcodeSession
+                        ? <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">✅ Saved</span>
+                        : <span className="text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full">Not set</span>}
+                    </td>
+                    <td className="px-4 py-3 text-slate-400 text-xs">{new Date(u.createdAt).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
     </div>
   );
